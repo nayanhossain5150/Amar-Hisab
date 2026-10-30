@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>আমার হিসাব - Amar Hisab</title>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Firebase SDKs -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
+  import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAhn5HacRD7r9BlBF3UaUF361RV-c9RgU4",
+    authDomain: "amar-hisab-453fc.firebaseapp.com",
+    projectId: "amar-hisab-453fc",
+    storageBucket: "amar-hisab-453fc.firebasestorage.app",
+    messagingSenderId: "89063670453",
+    appId: "1:89063670453:web:1c739ca610d91cf4a0f4fc"
+  };
+
+  const fbApp = initializeApp(firebaseConfig);
+  const auth = getAuth(fbApp);
+  const db = getFirestore(fbApp);
+  const provider = new GoogleAuthProvider();
+
+  window.fbGoogleLogin = async () => {
+    try {
+      toast('গুগল লগইন উইন্ডো খোলা হচ্ছে...');
+      const res = await signInWithPopup(auth, provider);
+      toast('লগইন সফল: ' + (res.user.displayName || res.user.email));
+      updateAuthUI(res.user);
+      syncNowOnline(res.user.uid);
+    } catch (err) {
+      toast('লগইন ব্যর্থ বা বাতিল করা হয়েছে!', true);
+    }
+  };
+
+  window.fbLogout = async () => {
+    try {
+      await signOut(auth);
+      toast('লগআউট সফল');
+      updateAuthUI(null);
+    } catch (err) { }
+  };
+
+  window.syncNowOnline = async (userId) => {
+    const user = auth.currentUser;
+    const uid = userId || (user ? user.uid : null);
+    if (!uid) {
+      toast('আগে গুগল দিয়ে লগইন করুন!', true);
+      return window.fbGoogleLogin();
+    }
+    try {
+      toast('অনলাইন ক্লাউডে সিঙ্ক হচ্ছে...');
+      const dataToSync = JSON.parse(localStorage.getItem(KEY) || '{}');
+      await setDoc(doc(db, "users_data", uid), {
+        data: JSON.stringify(dataToSync),
+        updatedAt: new Date().toISOString()
+      });
+      toast('সফলভাবে অনলাইনে ক্লাউডে ব্যাকআপ (Sync) হয়েছে!');
+    } catch (err) {
+      toast('অনলাইন সিঙ্ক ব্যর্থ হয়েছে!', true);
+    }
+  };
+
+  auth.onAuthStateChanged(user => {
+    updateAuthUI(user);
+    if (user) {
+      getDoc(doc(db, "users_data", user.uid)).then(docSnap => {
+        if (docSnap.exists() && docSnap.data().data) {
+          try {
+            const cloudData = JSON.parse(docSnap.data().data);
+            if (cloudData.allMembers) {
+              appData = cloudData;
+              saveData();
+              toast('ক্লাউড থেকে আপনার ডাটা রিকভার করা হয়েছে!');
+            }
+          } catch(e) {}
+        }
+      }).catch(e=>{});
+    }
+  });
+
+  function updateAuthUI(user) {
+    const statusEl = $('authStatus');
+    const btnEl = $('authBtnContainer');
+    if (!statusEl || !btnEl) return;
+    if (user) {
+      statusEl.innerText = `লগইন আছেন: ${user.email}`;
+      statusEl.className = "text-[10px] text-emerald-400 font-medium";
+      btnEl.innerHTML = `<button onclick="window.fbLogout()" class="w-full bg-red-700 py-2 rounded-xl text-xs font-semibold text-white">গুগল লগআউট করুন</button>`;
+    } else {
+      statusEl.innerText = "গুগল অ্যাকাউন্ট দিয়ে লগইন করা নেই";
+      statusEl.className = "text-[10px] text-red-400 font-medium";
+      btnEl.innerHTML = `<button onclick="window.fbGoogleLogin()" class="w-full bg-blue-600 py-2 rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-2"><i class="fa-solid fa-right-to-bracket"></i> গুগল দিয়ে লগইন করুন</button>`;
+    }
+  }
+</script>
+
+<style>
+body{font-family:'Noto Sans Bengali',sans-serif;background:#0b0f19;color:#f3f4f6;user-select:none}
+.card-3d-green{background:linear-gradient(135deg,rgba(6,78,59,.85),rgba(2,44,34,.95));border-left:5px solid #10b981}
+.card-3d-red{background:linear-gradient(135deg,rgba(127,29,29,.85),rgba(69,10,10,.95));border-left:5px solid #ef4444}
+.card-3d-blue{background:linear-gradient(135deg,rgba(30,58,138,.85),rgba(15,23,42,.95));border-left:5px solid #3b82f6}
+.card-3d-orange{background:linear-gradient(135deg,rgba(124,45,18,.85),rgba(67,20,7,.95));border-left:5px solid #f97316}
+.card-3d-gold{background:linear-gradient(135deg,rgba(113,63,18,.85),rgba(63,31,6,.95));border-left:5px solid #eab308}
+.card-3d-purple{background:linear-gradient(135deg,rgba(76,29,149,.85),rgba(30,27,75,.95));border-left:5px solid #8b5cf6}
+.header-card{background:linear-gradient(135deg,#111827,#1e1b4b);border:1px solid rgba(99,102,241,.35)}
+.action-card{background:linear-gradient(145deg,#111827,#1f2937);border:1px solid rgba(255,255,255,.05)}
+.inp{width:100%;background:#030712;border:1px solid #1f2937;border-radius:.5rem;padding:.5rem;color:#fff;user-select:text}
+.lbl{font-size:10px;color:#9ca3af;display:block}
+.mbox{background:#111827;border-radius:1rem;width:100%;max-width:24rem;padding:1rem}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:50;display:flex;align-items:center;justify-content:center;padding:1rem}
+.modal.hidden,.hidden{display:none}
+.row{background:#111827;border:1px solid #1f2937;padding:.625rem;border-radius:.75rem;display:flex;justify-content:space-between;align-items:center;cursor:pointer;font-size:.75rem}
+#toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:#059669;color:#fff;padding:.5rem 1rem;border-radius:.75rem;font-size:12px;z-index:200;display:none;max-width:90%;text-align:center}
+</style>
+</head>
+<body class="pb-24">
+
+<!-- LOCK SCREEN -->
+<div id="lockScreen" class="fixed inset-0 z-[100] flex items-center justify-center p-6 hidden" style="background:#0b0f19">
+  <div class="text-center space-y-3 w-full max-w-xs">
+    <div class="w-16 h-16 mx-auto rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-2xl"><i class="fa-solid fa-lock"></i></div>
+    <h1 class="text-lg font-bold text-amber-300">আমার হিসাব</h1>
+    <p class="text-[11px] text-gray-400">অ্যাপ খুলতে পিন দিন (প্রাথমিক পিন: 1234)</p>
+    <input type="password" inputmode="numeric" id="lockPin" maxlength="4" placeholder="••••" class="inp w-32 mx-auto text-center text-lg tracking-widest" onkeydown="if(event.key==='Enter')unlockApp()">
+    <button onclick="unlockApp()" class="w-full bg-amber-600 py-2 rounded-xl text-sm font-semibold">খুলুন</button>
+  </div>
+</div>
+<div id="toast"></div>
+
+<div class="max-w-md mx-auto p-4 space-y-4">
+  <!-- HEADER -->
+  <div class="header-card rounded-2xl p-3.5 text-white relative shadow-xl">
+    <div class="flex items-center justify-between gap-2">
+      <div class="w-11 h-11 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-lg shrink-0"><i class="fa-solid fa-scale-balanced"></i></div>
+      <div class="text-center flex-1">
+        <h1 class="text-lg font-bold bg-gradient-to-r from-amber-300 via-yellow-200 to-cyan-300 bg-clip-text text-transparent">আমার হিসাব</h1>
+        <p class="text-[10px] text-cyan-200/80">ব্যক্তিগত ডিজিটাল হিসাব খাতা</p>
+        <div class="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-[10px] text-emerald-300 font-medium"><i class="fa-solid fa-user-shield mr-1"></i> মোঃ ওয়াহেদ হোসেন নয়ন (মেম্বার)</div>
+      </div>
+      <div class="text-right text-[10px] text-cyan-100 bg-black/40 px-2 py-1 rounded-xl shrink-0">
+        <div id="live-time" class="font-bold text-amber-300">--:--:--</div>
+        <div id="live-date" class="text-[8px] text-gray-300">--</div>
+      </div>
+    </div>
+    <div class="flex gap-2 mt-2.5">
+      <button onclick="openAddMemberModal()" class="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow"><i class="fa-solid fa-user-plus"></i> + নতুন সদস্য</button>
+      <button onclick="openReminderModal()" class="py-2 px-3 rounded-xl bg-indigo-600 text-white font-semibold text-xs flex items-center gap-1 shadow"><i class="fa-solid fa-bell"></i> রিমাইন্ডার</button>
+    </div>
+  </div>
+
+  <!-- MENU -->
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-1.5 flex justify-around text-xs shadow">
+    <button onclick="switchTab('home')" id="nav-home" class="flex flex-col items-center py-1.5 px-3 rounded-lg bg-blue-600 text-white font-medium"><i class="fa-solid fa-house text-sm mb-0.5"></i> হোম</button>
+    <button onclick="switchTab('members')" id="nav-members" class="flex flex-col items-center py-1.5 px-3 rounded-lg text-gray-400"><i class="fa-solid fa-users text-sm mb-0.5"></i> দেনা-পাওনা</button>
+    <button onclick="switchTab('loan')" id="nav-loan" class="flex flex-col items-center py-1.5 px-3 rounded-lg text-gray-400"><i class="fa-solid fa-landmark text-sm mb-0.5"></i> লোন ও সুদ</button>
+    <button onclick="switchTab('report')" id="nav-report" class="flex flex-col items-center py-1.5 px-3 rounded-lg text-gray-400"><i class="fa-solid fa-chart-pie text-sm mb-0.5"></i> রিপোর্ট</button>
+    <button onclick="switchTab('settings')" id="nav-settings" class="flex flex-col items-center py-1.5 px-3 rounded-lg text-gray-400"><i class="fa-solid fa-gear text-sm mb-0.5"></i> সেটিংস</button>
+  </div>
+
+  <!-- HOME -->
+  <div id="tab-home" class="space-y-4">
+    <div class="relative">
+      <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-cyan-400 text-sm"></i>
+      <input type="text" id="searchInput" oninput="handleGlobalSearch(this.value)" placeholder="ড্যাশবোর্ডে খুঁজুন (নামের অক্ষর লিখুন)..." autocomplete="off" class="w-full bg-gray-900 border border-cyan-500/30 rounded-xl py-2.5 pl-10 pr-4 text-xs text-white placeholder-gray-400 focus:outline-none" style="user-select:text">
+      <div id="globalSearchResults" class="hidden absolute left-0 right-0 top-12 bg-gray-900 border border-cyan-500/40 rounded-xl shadow-2xl z-40 max-h-48 overflow-y-auto"></div>
+    </div>
+    <div>
+      <div class="flex items-center justify-between mb-2 px-1">
+        <h2 class="text-xs font-bold text-cyan-300 flex items-center gap-1.5"><i class="fa-solid fa-chart-simple"></i> হিসাবের সারাংশ</h2>
+        <span class="text-[10px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-500/30">লাইভ</span>
+      </div>
+      <div class="grid grid-cols-2 gap-2.5">
+        <div onclick="showSummaryDetails('pawna')" class="card-3d-green rounded-xl p-2.5 flex flex-col justify-between cursor-pointer"><span class="text-[11px] text-emerald-200">মোট পাওনা</span><span id="sum-pawna" class="text-base font-bold text-emerald-300 mt-1">৳ ০</span></div>
+        <div onclick="showSummaryDetails('dena')" class="card-3d-red rounded-xl p-2.5 flex flex-col justify-between cursor-pointer"><span class="text-[11px] text-red-200">মোট দেনা</span><span id="sum-dena" class="text-base font-bold text-red-300 mt-1">৳ ০</span></div>
+        <div onclick="showSummaryDetails('capital')" class="card-3d-blue rounded-xl p-2.5 flex flex-col justify-between cursor-pointer"><span class="text-[11px] text-blue-200">লোন মূলধন (স্থির)</span><span id="sum-capital" class="text-base font-bold text-blue-300 mt-1">৳ ০</span></div>
+        <div onclick="showSummaryDetails('due_interest')" class="card-3d-orange rounded-xl p-2.5 flex flex-col justify-between cursor-pointer"><span class="text-[11px] text-orange-200">বকেয়া সুদ</span><span id="sum-interest-due" class="text-base font-bold text-orange-300 mt-1">৳ ০.০০</span></div>
+        <div onclick="showSummaryDetails('paid_interest')" class="card-3d-gold rounded-xl p-2.5 flex flex-col justify-between cursor-pointer"><span class="text-[11px] text-amber-200">মোট সুদ আদায়</span><span id="sum-interest-paid" class="text-base font-bold text-amber-300 mt-1">৳ ০.০০</span></div>
+        <div onclick="showSummaryDetails('members')" class="card-3d-purple rounded-xl p-2.5 flex flex-col justify-between cursor-pointer"><span class="text-[11px] text-purple-200">সদস্য সংখ্যা</span><span id="sum-member-count" class="text-base font-bold text-purple-300 mt-1">০ জন</span></div>
+      </div>
+    </div>
+    <div>
+      <h2 class="text-xs font-bold text-amber-400 mb-2 px-1"><i class="fa-solid fa-bolt"></i> দ্রুত কাজ</h2>
+      <div class="grid grid-cols-2 gap-2">
+        <button onclick="openQuickActionModal('pawna')" class="action-card rounded-xl p-2.5 flex items-center justify-between text-xs text-gray-200 border-l-4 border-emerald-500"><span>+ পাওনা যোগ</span><i class="fa-solid fa-plus text-emerald-400"></i></button>
+        <button onclick="openQuickActionModal('dena')" class="action-card rounded-xl p-2.5 flex items-center justify-between text-xs text-gray-200 border-l-4 border-red-500"><span>+ দেনা যোগ</span><i class="fa-solid fa-plus text-red-400"></i></button>
+        <button onclick="openQuickActionModal('collection')" class="action-card rounded-xl p-2.5 flex items-center justify-between text-xs text-gray-200 border-l-4 border-cyan-500"><span>↓ টাকা আদায়</span><i class="fa-solid fa-arrow-down text-cyan-400"></i></button>
+        <button onclick="openQuickActionModal('loan_give')" class="action-card rounded-xl p-2.5 flex items-center justify-between text-xs text-gray-200 border-l-4 border-blue-500"><span>↑ মূলধন দিলাম</span><i class="fa-solid fa-arrow-up text-blue-400"></i></button>
+        <button onclick="openQuickActionModal('loan_get')" class="action-card rounded-xl p-2.5 flex items-center justify-between text-xs text-gray-200 border-l-4 border-purple-500"><span>↓ মূলধন পেলাম</span><i class="fa-solid fa-arrow-down text-purple-400"></i></button>
+        <button onclick="openQuickActionModal('interest')" class="action-card rounded-xl p-2.5 flex items-center justify-between text-xs text-gray-200 border-l-4 border-amber-500"><span>% সুদ পেলাম</span><i class="fa-solid fa-percent text-amber-400"></i></button>
+      </div>
+    </div>
+    <div>
+      <h2 class="text-xs font-bold text-cyan-300 mb-2 px-1"><i class="fa-solid fa-clock-rotate-left"></i> সাম্প্রতিক লেনদেন</h2>
+      <div id="recent-transactions-list" class="bg-gray-900 border border-gray-800 rounded-xl p-3 text-center text-xs text-gray-400 space-y-2">কোনো সাম্প্রতিক লেনদেন নেই</div>
+    </div>
+  </div>
+
+  <!-- DENA PAWNA -->
+  <div id="tab-members" class="hidden space-y-3">
+    <div class="flex justify-between items-center"><h2 class="text-xs font-bold text-cyan-300">দেনা-পাওনা হিসাব খাতা</h2><button onclick="openAddToCategoryModal('general')" class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium">+ সদস্য যুক্ত করুন</button></div>
+    <div id="general-members-list" class="space-y-2"></div>
+  </div>
+
+  <!-- LOAN -->
+  <div id="tab-loan" class="hidden space-y-3">
+    <div class="flex justify-between items-center"><h2 class="text-xs font-bold text-cyan-300">লোন ও সুদ খাতা</h2><button onclick="openAddToCategoryModal('loan')" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium">+ লোন সদস্য যুক্ত করুন</button></div>
+    <div id="loan-members-list" class="space-y-2"></div>
+  </div>
+
+  <!-- REPORT -->
+  <div id="tab-report" class="hidden space-y-3">
+    <h2 class="text-xs font-bold text-cyan-300">সমস্ত রিপোর্ট ও লেনদেন হিস্ট্রি</h2>
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-2.5 text-xs">
+      <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-400">সর্বমোট সদস্য:</span><span id="rep-total-members" class="font-bold text-white">০ জন</span></div>
+      <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-400">সর্বমোট পাওনা:</span><span id="rep-total-pawna" class="font-bold text-emerald-400">৳ ০</span></div>
+      <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-400">সর্বমোট দেনা:</span><span id="rep-total-dena" class="font-bold text-red-400">৳ ০</span></div>
+      <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-400">স্থির লোন মূলধন:</span><span id="rep-total-capital" class="font-bold text-blue-400">৳ ০</span></div>
+      <div class="flex justify-between border-b border-gray-800 pb-2"><span class="text-gray-400">বকেয়া সুদ:</span><span id="rep-total-due-interest" class="font-bold text-orange-400">৳ ০.০০</span></div>
+      <div class="flex justify-between"><span class="text-gray-400">আদায়কৃত মোট সুদ:</span><span id="rep-total-paid-interest" class="font-bold text-amber-400">৳ ০.০০</span></div>
+    </div>
+    <button onclick="downloadFullReport()" class="w-full bg-cyan-600 py-2.5 rounded-xl font-medium text-xs text-white">সমস্ত লেনদেন রিপোর্ট ডাউনলোড করুন</button>
+  </div>
+
+  <!-- SETTINGS -->
+  <div id="tab-settings" class="hidden space-y-3">
+    <h2 class="text-xs font-bold text-cyan-300">অ্যাপ সেটিংস ও ক্লাউড সিঙ্ক</h2>
+    <div class="space-y-2">
+      <!-- Google Auth & Cloud Sync -->
+      <div class="text-[11px] text-cyan-300 pt-1">গুগল অ্যাকাউন্ট ও অনলাইন ক্লাউড ব্যাকআপ</div>
+      <div class="bg-gray-900 border border-cyan-500/30 p-3 rounded-xl space-y-2">
+        <div id="authStatus" class="text-[10px] text-gray-400">অ্যাকাউন্ট স্ট্যাটাস চেক করা হচ্ছে...</div>
+        <div id="authBtnContainer"></div>
+        <button onclick="window.syncNowOnline()" class="w-full bg-emerald-700 py-2 rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-2"><i class="fa-solid fa-cloud-arrow-up"></i> Sync Now (অনলাইনে ক্লাউডে সেভ)</button>
+      </div>
+
+      <div class="text-[11px] text-cyan-300 pt-1">নিরাপত্তা ও লক স্ক্রিন</div>
+      <div class="bg-gray-900 border border-gray-800 p-3 rounded-xl text-xs flex justify-between items-center text-gray-200">
+        <span>অ্যাপ খোলার সময় পিন লক</span>
+        <button id="lockToggleBtn" onclick="toggleLockScreenSetting()" class="px-3 py-1 rounded-lg font-semibold text-xs transition-colors">--</button>
+      </div>
+      <button onclick="openPinModal('change_pin')" class="w-full text-left bg-gray-900 border border-gray-800 p-3 rounded-xl text-xs flex justify-between items-center text-gray-200"><span>পিন কোড পরিবর্তন</span><i class="fa-solid fa-chevron-right"></i></button>
+      
+      <div class="text-[11px] text-cyan-300 pt-2">অফলাইন ব্যাকআপ</div>
+      <button onclick="localBackup()" class="w-full text-left bg-gray-900 border border-cyan-500/30 p-3 rounded-xl text-xs flex justify-between items-center text-gray-200"><span class="flex items-center gap-2"><i class="fa-solid fa-floppy-disk text-emerald-400"></i> ডিভাইসে ব্যাকআপ ডাউনলোড</span><i class="fa-solid fa-chevron-right"></i></button>
+      <button onclick="document.getElementById('restoreFile').click()" class="w-full text-left bg-gray-900 border border-cyan-500/30 p-3 rounded-xl text-xs flex justify-between items-center text-gray-200"><span class="flex items-center gap-2"><i class="fa-solid fa-rotate-left text-purple-400"></i> ব্যাকআপ ফাইল থেকে রিস্টোর (JSON)</span><i class="fa-solid fa-chevron-right"></i></button>
+      <input type="file" id="restoreFile" accept=".json,application/json" class="hidden" onchange="restoreBackup(this)">
+      <button onclick="restoreAuto()" class="w-full text-left bg-gray-900 border border-cyan-500/30 p-3 rounded-xl text-xs flex justify-between items-center text-gray-200"><span class="flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left text-amber-400"></i> স্বয়ংক্রিয় স্ন্যাপশট থেকে রিস্টোর</span><i class="fa-solid fa-chevron-right"></i></button>
+      <div id="bk-status" class="text-[10px] text-gray-400 px-1"></div>
+      
+      <button onclick="openPinModal('reset_data')" class="w-full text-left bg-gray-900 border border-red-900/40 p-3 rounded-xl text-xs flex justify-between items-center text-red-400 mt-2"><span>সম্পূর্ণ ডাটা রিসেট করুন</span><i class="fa-solid fa-chevron-right"></i></button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div id="addMemberModal" class="modal hidden"><div class="mbox border border-cyan-500/30 space-y-3">
+  <h3 class="text-xs font-bold text-cyan-300 flex justify-between"><span>নতুন সদস্য তৈরি করুন</span><i class="fa-solid fa-xmark cursor-pointer" onclick="closeModal('addMemberModal')"></i></h3>
+  <div class="space-y-2 text-xs">
+    <div><label class="lbl">নাম *</label><input type="text" id="mName" placeholder="সদস্যের নাম লিখুন" class="inp"></div>
+    <div><label class="lbl">পিতার নাম</label><input type="text" id="mFather" placeholder="পিতার নাম লিখুন" class="inp"></div>
+    <div><label class="lbl">মোবাইল নম্বর *</label><input type="tel" id="mPhone" placeholder="মোবাইল নম্বর লিখুন" class="inp"></div>
+    <div><label class="lbl">ঠিকানা</label><input type="text" id="mAddress" placeholder="ঠিকানা লিখুন" class="inp"></div>
+    <div><label class="lbl">বিবরণ / নোট</label><textarea id="mNote" placeholder="বিবরণ লিখুন..." class="inp h-16"></textarea></div>
+  </div>
+  <div class="flex gap-2 pt-2"><button onclick="closeModal('addMemberModal')" class="w-1/2 bg-gray-800 py-2 rounded-lg text-xs text-gray-300">বাতিল</button><button onclick="saveNewMember()" class="w-1/2 bg-emerald-600 py-2 rounded-lg text-xs font-semibold text-white">সংরক্ষণ করুন</button></div>
+</div></div>
+
+<div id="addToCategoryModal" class="modal hidden"><div class="mbox border border-indigo-500/30 space-y-3">
+  <h3 class="text-xs font-bold text-indigo-300 flex justify-between"><span id="catModalTitle">খাতায় সদস্য যুক্ত করুন</span><i class="fa-solid fa-xmark cursor-pointer" onclick="closeModal('addToCategoryModal')"></i></h3>
+  <div class="space-y-2 text-xs">
+    <div class="relative"><label class="lbl">সদস্য বাছাই করুন (নামের অক্ষর লিখুন) *</label><input type="text" id="catMemberInput" oninput="handleCatSearch(this.value)" placeholder="নাম লিখলে নাম ভেসে উঠবে..." autocomplete="off" class="inp">
+      <div id="catSearchResults" class="hidden absolute left-0 right-0 top-14 bg-gray-900 border border-indigo-500/40 rounded-xl shadow-2xl z-40 max-h-36 overflow-y-auto"></div></div>
+    <div id="catLoanFields" class="hidden space-y-2 border-t border-gray-800 pt-2">
+      <div><label class="lbl">মেয়াদ/ক্যাটাগরি</label><select id="catLoanTerm" class="inp"><option value="দৈনিক">দৈনিক</option><option value="সাপ্তাহিক">সাপ্তাহিক</option><option value="মাসিক" selected>মাসিক</option></select></div>
+      <div><label class="lbl">প্রাথমিক লোন মূলধন (টাকা)</label><input type="number" id="catLoanCapital" placeholder="৳ ০.০০" class="inp"></div>
+      <div><label class="lbl">সুদের হিসাব পদ্ধতি</label><select id="catInterestType" class="inp"><option value="percent">পার্সেন্টেজ (%) অনুযায়ী</option><option value="manual">ম্যানুয়ালি (টাকায়)</option></select></div>
+      <div><label class="lbl">সুদের হার বা পরিমাণ (প্রতি মেয়াদে)</label><input type="number" id="catInterestValue" placeholder="যেমন: 5" class="inp"></div>
+    </div>
+  </div>
+  <div class="flex gap-2 pt-2"><button onclick="closeModal('addToCategoryModal')" class="w-1/2 bg-gray-800 py-2 rounded-lg text-xs text-gray-300">বাতিল</button><button onclick="submitAddToCategory()" class="w-1/2 bg-indigo-600 py-2 rounded-lg text-xs font-semibold text-white">যুক্ত করুন</button></div>
+</div></div>
+
+<div id="quickActionModal" class="modal hidden"><div class="mbox border border-amber-500/30 space-y-3">
+  <h3 class="text-xs font-bold text-amber-300 flex justify-between"><span id="qaTitle">দ্রুত এন্ট্রি</span><i class="fa-solid fa-xmark cursor-pointer" onclick="closeModal('quickActionModal')"></i></h3>
+  <div class="space-y-2 text-xs">
+    <div class="relative"><label class="lbl">সদস্য বাছাই করুন (নামের অক্ষর লিখুন) *</label><input type="text" id="qaMemberInput" oninput="handleQaSearch(this.value)" placeholder="নাম লিখলে নাম ভেসে উঠবে..." autocomplete="off" class="inp">
+      <div id="qaSearchResults" class="hidden absolute left-0 right-0 top-14 bg-gray-900 border border-amber-500/40 rounded-xl shadow-2xl z-40 max-h-36 overflow-y-auto"></div></div>
+    <div><label class="lbl">পরিমাণ (টাকা) *</label><input type="number" id="qaAmount" placeholder="৳ ০.০০" class="inp"></div>
+    <div><label class="lbl">বিবরণ / নোট</label><input type="text" id="qaNote" placeholder="বিবরণ লিখুন..." class="inp"></div>
+  </div>
+  <div class="flex gap-2 pt-2"><button onclick="closeModal('quickActionModal')" class="w-1/2 bg-gray-800 py-2 rounded-lg text-xs text-gray-300">বাতিল</button><button onclick="submitQuickAction()" class="w-1/2 bg-amber-600 py-2 rounded-lg text-xs font-semibold text-white">এন্ট্রি নিশ্চিত করুন</button></div>
+</div></div>
+
+<div id="pinModal" class="modal hidden"><div class="mbox max-w-xs border border-amber-500/30 space-y-3 text-center">
+  <h3 class="text-xs font-bold text-amber-300">পিন কোড যাচাই</h3>
+  <p class="text-[10px] text-gray-400">বর্তমান পিন দিন (প্রাথমিক: 1234)</p>
+  <input type="password" inputmode="numeric" id="pinInput" maxlength="4" placeholder="••••" class="inp w-28 mx-auto text-center text-base tracking-widest">
+  <div id="newPinBox" class="hidden space-y-1"><p class="text-[10px] text-gray-400">নতুন ৪ সংখ্যার পিন</p><input type="password" inputmode="numeric" id="newPinInput" maxlength="4" placeholder="••••" class="inp w-28 mx-auto text-center text-base tracking-widest"></div>
+  <div class="flex gap-2 pt-1"><button onclick="closeModal('pinModal')" class="w-1/2 bg-gray-800 py-1.5 rounded-lg text-xs text-gray-300">বাতিল</button><button onclick="verifyPinAction()" class="w-1/2 bg-amber-600 py-1.5 rounded-lg text-xs font-semibold text-white">যাচাই</button></div>
+</div></div>
+
+<div id="profileModal" class="modal hidden" style="background:rgba(0,0,0,.9);flex-direction:column;overflow-y:auto">
+  <div class="max-w-md mx-auto w-full space-y-3 my-auto">
+    <div class="flex justify-between items-center bg-gray-900 p-3 rounded-xl border border-gray-800"><h3 id="profile-title" class="text-xs font-bold text-cyan-300">সদস্য প্রোফাইল</h3><button onclick="closeModal('profileModal')" class="text-gray-400"><i class="fa-solid fa-xmark text-base"></i></button></div>
+    <div id="profile-details-content" class="bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-3 text-xs text-gray-300 max-h-[80vh] overflow-y-auto"></div>
+  </div>
+</div>
+
+<div id="summaryModal" class="modal hidden"><div class="mbox border border-cyan-500/30 space-y-3">
+  <h3 class="text-xs font-bold text-cyan-300 flex justify-between"><span id="summaryModalTitle">বিস্তারিত হিসাব</span><i class="fa-solid fa-xmark cursor-pointer" onclick="closeModal('summaryModal')"></i></h3>
+  <div id="summaryModalContent" class="space-y-2 text-xs text-gray-300 max-h-60 overflow-y-auto"></div>
+</div></div>
+
+<div id="reminderModal" class="modal hidden"><div class="mbox border border-indigo-500/30 space-y-3 text-center">
+  <h3 class="text-xs font-bold text-indigo-300">রিমাইন্ডার ও তাগাদা বার্তা</h3>
+  <div id="reminder-list" class="space-y-2 max-h-60 overflow-y-auto text-left text-xs"></div>
+  <button onclick="closeModal('reminderModal')" class="w-full bg-indigo-600 py-2 rounded-lg text-xs font-semibold text-white">বন্ধ করুন</button>
+</div></div>
+
+<script>
+const KEY = 'amar_hisab_v7';
+const DAY = 864e5;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => Number(n || 0).toLocaleString('bn-BD', { maximumFractionDigits: 2 });
+const r2 = n => Math.round(n * 100) / 100;
+const MODALS = ['addMemberModal','addToCategoryModal','quickActionModal','pinModal','profileModal','summaryModal','reminderModal'];
+const TABS = ['home','members','loan','report','settings'];
+
+let saved = null;
+try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+let appData = Object.assign({ pin:'1234', lockEnabled: true, allMembers:[], generalMembers:[], loanMembers:[], transactions:[] }, saved || {});
+let activeCategoryTab = 'general', selectedCatMemberId = null, selectedQaMemberId = null, selectedQaType = null,
+    pendingPinAction = null, activeProfileId = null, activeProfileType = 'general', currentTab = 'home';
+
+function toast(msg, bad) {
+  const t = $('toast'); t.innerText = msg; t.style.background = bad ? '#dc2626' : '#059669'; t.style.display = 'block';
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = 'none', 2600);
+}
+
+/* ---------- Save + auto snapshot ---------- */
+function autoSnap() {
+  try {
+    const last = Number(localStorage.getItem(KEY + '_auto_t') || 0);
+    if (Date.now() - last > DAY) {
+      const s = JSON.stringify(appData);
+      if (s.length < 1500000) {
+        localStorage.setItem(KEY + '_auto', s);
+        localStorage.setItem(KEY + '_auto_t', String(Date.now()));
+      }
+    }
+  } catch (e) {}
+}
+function saveData() {
+  try { localStorage.setItem(KEY, JSON.stringify(appData)); autoSnap(); }
+  catch (e) { toast('সেভ হয়নি! স্টোরেজ পূর্ণ — এখনই ব্যাকআপ নিন', true); }
+  renderAll();
+}
+function renderAll() {
+  updateSummaryCards(); renderRecentTransactions();
+  if (currentTab === 'members') renderGeneralMembers();
+  if (currentTab === 'loan') renderLoanMembers();
+  if (currentTab === 'report') renderReportTab();
+  if (currentTab === 'settings') { backupStatus(); updateLockSettingUI(); }
+}
+
+/* ---------- Clock ---------- */
+function updateDateTime() {
+  const now = new Date(); let h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+  const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+  $('live-time').innerText = `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ${ap}`;
+  $('live-date').innerText = now.toLocaleDateString('bn-BD', { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+}
+setInterval(updateDateTime, 1000); updateDateTime();
+
+/* ---------- Lock Screen Logic ---------- */
+function checkLockScreen() {
+  if (appData.lockEnabled !== false) {
+    $('lockScreen').classList.remove('hidden');
+  } else {
+    $('lockScreen').classList.add('hidden');
+  }
+}
+function unlockApp() {
+  if ($('lockPin').value === appData.pin) { 
+    $('lockScreen').classList.add('hidden'); 
+    $('lockPin').value = ''; 
+  } else { 
+    toast('ভুল পিন!', true); 
+    $('lockPin').value = ''; 
+  }
+}
+function updateLockSettingUI() {
+  const btn = $('lockToggleBtn');
+  if (!btn) return;
+  const isEnabled = appData.lockEnabled !== false;
+  btn.innerText = isEnabled ? 'অন (Active)' : 'অফ (Disabled)';
+  btn.className = isEnabled 
+    ? 'px-3 py-1 rounded-lg font-semibold text-xs bg-emerald-600 text-white' 
+    : 'px-3 py-1 rounded-lg font-semibold text-xs bg-red-600 text-white';
+}
+function toggleLockScreenSetting() {
+  const current = appData.lockEnabled !== false;
+  if (current) {
+    pendingPinAction = 'disable_lock';
+    openPinModal('disable_lock');
+  } else {
+    appData.lockEnabled = true;
+    saveData();
+    toast('পিন লক চালু করা হয়েছে');
+  }
+}
+
+/* ---------- Navigation / Back ---------- */
+history.pushState({ p: 1 }, '');
+window.addEventListener('popstate', () => {
+  const open = MODALS.some(m => !$(m).classList.contains('hidden'));
+  if (open) closeAllModals(); else if (currentTab !== 'home') switchTab('home');
+  history.pushState({ p: 1 }, '');
+});
+function closeAllModals() {
+  MODALS.forEach(m => $(m).classList.add('hidden'));
+  ['globalSearchResults','catSearchResults','qaSearchResults'].forEach(i => $(i).classList.add('hidden'));
+}
+function closeModal(id) { $(id).classList.add('hidden'); }
+function switchTab(t) {
+  currentTab = t;
+  TABS.forEach(x => { $('tab-' + x).classList.add('hidden'); $('nav-' + x).className = 'flex flex-col items-center py-1.5 px-3 rounded-lg text-gray-400'; });
+  $('tab-' + t).classList.remove('hidden');
+  $('nav-' + t).className = 'flex flex-col items-center py-1.5 px-3 rounded-lg bg-blue-600 text-white font-medium';
+  renderAll();
+}
+
+/* ---------- Members ---------- */
+function openAddMemberModal() {
+  ['mName','mFather','mPhone','mAddress','mNote'].forEach(i => $(i).value = '');
+  $('addMemberModal').classList.remove('hidden');
+}
+function saveNewMember() {
+  const name = $('mName').value.trim(), father = $('mFather').value.trim(), phone = $('mPhone').value.trim(),
+        address = $('mAddress').value.trim(), note = $('mNote').value.trim();
+  if (!name || !phone) return toast('সদস্যের নাম এবং মোবাইল নম্বর বাধ্যতামূলক!', true);
+  if (!/^[+0-9\s-]{6,16}$/.test(phone)) return toast('মোবাইল নম্বর সঠিক নয়!', true);
+  if (appData.allMembers.some(m => m.phone === phone)) return toast('এই নম্বরে আগেই সদস্য আছে!', true);
+  
+  appData.allMembers.push({ id: 'PERS_' + Date.now(), name, father, phone, address, note,
+    date: `${new Date().toLocaleDateString('bn-BD')} ${new Date().toLocaleTimeString('bn-BD')}` });
+  saveData(); closeModal('addMemberModal'); toast('নতুন সদস্য সফলভাবে তৈরি হয়েছে!');
+}
+
+/* ---------- Add to category ---------- */
+function openAddToCategoryModal(type) {
+  activeCategoryTab = type; selectedCatMemberId = null;
+  $('catModalTitle').innerText = type === 'loan' ? 'লোন খাতায় সদস্য যুক্ত করুন' : 'দেনা-পাওনা খাতায় সদস্য যুক্ত করুন';
+  $('catMemberInput').value = '';
+  $('catLoanFields').classList.toggle('hidden', type !== 'loan');
+  $('catLoanCapital').value = ''; $('catInterestValue').value = '';
+  $('addToCategoryModal').classList.remove('hidden');
+}
+function searchRows(list, q, onclickFn) {
+  const m = list.filter(x => x.name.toLowerCase().includes(q) || x.phone.includes(q));
+  return m.length === 0 ? `<div class="p-2 text-xs text-gray-400 text-center">সদস্য পাওয়া যায়নি</div>` :
+    m.map(x => `<div onclick="${onclickFn}('${x.id}')" class="p-2 border-b border-gray-800 hover:bg-gray-800 cursor-pointer text-xs flex justify-between"><span class="text-white">${esc(x.name)}</span><span class="text-gray-400">${esc(x.phone)}</span></div>`).join('');
+}
+function handleCatSearch(v) {
+  const box = $('catSearchResults'); if (!v.trim()) return box.classList.add('hidden');
+  box.innerHTML = searchRows(appData.allMembers, v.toLowerCase().trim(), 'selectCatMember'); box.classList.remove('hidden');
+}
+function selectCatMember(id) {
+  selectedCatMemberId = id; $('catMemberInput').value = appData.allMembers.find(m => m.id === id)?.name || '';
+  $('catSearchResults').classList.add('hidden');
+}
+const addPeriod = (ts, term) => { const d = new Date(ts); if (term === 'মাসিক') d.setMonth(d.getMonth() + 1); else d.setDate(d.getDate() + (term === 'সাপ্তাহিক' ? 7 : 1)); return d.getTime(); };
+const periodInterest = m => r2(m.interestType === 'percent' ? m.loanCapital * m.interestVal / 100 : m.interestVal);
+
+function submitAddToCategory() {
+  if (!selectedCatMemberId) return toast('সদস্য নির্বাচন করুন!', true);
+  const base = appData.allMembers.find(x => x.id === selectedCatMemberId); if (!base) return;
+  if (activeCategoryTab === 'general') {
+    if (appData.generalMembers.some(x => x.id === base.id)) return toast('ইতিমধ্যে যুক্ত আছেন!', true);
+    appData.generalMembers.push({ id: base.id, pawna: 0, dena: 0 });
+  } else {
+    if (appData.loanMembers.some(x => x.id === base.id)) return toast('ইতিমধ্যে যুক্ত আছেন!', true);
+    const capital = Number($('catLoanCapital').value || 0), interestType = $('catInterestType').value,
+          interestVal = Number($('catInterestValue').value || 0), term = $('catLoanTerm').value;
+    const lmem = { id: base.id, term, loanCapital: capital, dueInterest: 0, paidInterest: 0, interestType, interestVal };
+    lmem.nextDue = addPeriod(Date.now(), term);
+    appData.loanMembers.push(lmem);
+  }
+  saveData(); closeModal('addToCategoryModal'); toast('সফলভাবে যুক্ত হয়েছে!');
+}
+const person = id => appData.allMembers.find(p => p.id === id) || { id, name: '(মুছে ফেলা)', phone: '', father: '', address: '' };
+const gm = () => appData.generalMembers.map(m => ({ ...person(m.id), ...m }));
+const lm = () => appData.loanMembers.map(m => ({ ...person(m.id), ...m }));
+
+/* ---------- Auto interest ---------- */
+function accrueInterest() {
+  const now = Date.now(); let changed = false;
+  appData.loanMembers.forEach(m => {
+    if (!m.nextDue) { m.nextDue = addPeriod(now, m.term); changed = true; }
+    let guard = 0;
+    while (m.nextDue <= now && guard++ < 400) {
+      const amt = m.loanCapital > 0 ? periodInterest(m) : 0;
+      if (amt > 0) { m.dueInterest = r2(m.dueInterest + amt); logTx(m.id, amt, 'সুদ যোগ (স্বয়ংক্রিয়)', '', { dueInterest: amt }, new Date(m.nextDue)); }
+      m.nextDue = addPeriod(m.nextDue, m.term); changed = true;
+    }
+  });
+  if (changed) saveData();
+}
+function logTx(memberId, amount, typeText, note, delta, date) {
+  const d = date || new Date();
+  appData.transactions.unshift({ id: 'TX_' + Date.now() + Math.random().toString(36).slice(2, 6), memberId, amount, typeText, note, delta,
+    dateTime: `${d.toLocaleDateString('bn-BD')} ${d.toLocaleTimeString('bn-BD')}` });
+}
+
+/* ---------- Summary / search ---------- */
+function updateSummaryCards() {
+  let p = 0, d = 0, c = 0, di = 0, pi = 0;
+  appData.generalMembers.forEach(m => { p += m.pawna; d += m.dena; });
+  appData.loanMembers.forEach(m => { c += m.loanCapital; di += m.dueInterest; pi += m.paidInterest; });
+  $('sum-pawna').innerText = `৳ ${fmt(p)}`; $('sum-dena').innerText = `৳ ${fmt(d)}`; $('sum-capital').innerText = `৳ ${fmt(c)}`;
+  $('sum-interest-due').innerText = `৳ ${fmt(r2(di))}`; $('sum-interest-paid').innerText = `৳ ${fmt(r2(pi))}`;
+  $('sum-member-count').innerText = `${fmt(appData.allMembers.length)} জন`;
+}
+function handleGlobalSearch(v) {
+  const box = $('globalSearchResults'); if (!v.trim()) return box.classList.add('hidden');
+  const q = v.toLowerCase().trim(), hit = x => x.name.toLowerCase().includes(q) || x.phone.includes(q);
+  const g = gm().filter(hit), l = lm().filter(hit);
+  let h = '';
+  g.forEach(m => h += `<div onclick="openProfile('${m.id}','general')" class="p-2 border-b border-gray-800 hover:bg-gray-800 cursor-pointer text-xs flex justify-between"><span>${esc(m.name)} <span class="text-[9px] text-emerald-400">(দেনা-পাওনা)</span></span><span class="text-gray-400">${esc(m.phone)}</span></div>`);
+  l.forEach(m => h += `<div onclick="openProfile('${m.id}','loan')" class="p-2 border-b border-gray-800 hover:bg-gray-800 cursor-pointer text-xs flex justify-between"><span>${esc(m.name)} <span class="text-[9px] text-blue-400">(লোন)</span></span><span class="text-gray-400">${esc(m.phone)}</span></div>`);
+  box.innerHTML = h || `<div class="p-2.5 text-xs text-gray-400 text-center">কোনো সদস্য পাওয়া যায়নি</div>`;
+  box.classList.remove('hidden');
+}
+const avatar = (m, cls, size) => `<div class="${size} rounded-lg bg-gray-800 flex items-center justify-center ${cls} font-bold">${esc(m.name.charAt(0))}</div>`;
+function renderGeneralMembers() {
+  const l = gm();
+  $('general-members-list').innerHTML = l.length === 0 ? `<div class="bg-gray-900 p-4 rounded-xl text-center text-xs text-gray-400">কোনো সদস্য নেই</div>` :
+    l.map(m => `<div onclick="openProfile('${m.id}','general')" class="row"><div class="flex items-center gap-2.5">${avatar(m,'text-cyan-400','w-9 h-9')}<div><div class="font-bold text-white">${esc(m.name)}</div><div class="text-[10px] text-gray-400">${esc(m.phone)}</div></div></div><div class="text-right"><div class="text-emerald-400">পাওনা: ৳${fmt(m.pawna)}</div><div class="text-red-400">দেনা: ৳${fmt(m.dena)}</div></div></div>`).join('');
+}
+function renderLoanMembers() {
+  const l = lm();
+  $('loan-members-list').innerHTML = l.length === 0 ? `<div class="bg-gray-900 p-4 rounded-xl text-center text-xs text-gray-400">কোনো লোন সদস্য নেই</div>` :
+    l.map(m => `<div onclick="openProfile('${m.id}','loan')" class="row"><div class="flex items-center gap-2.5">${avatar(m,'text-blue-400','w-9 h-9')}<div><div class="font-bold text-white">${esc(m.name)} <span class="text-[9px] text-amber-400">(${esc(m.term)})</span></div><div class="text-[10px] text-gray-400">${esc(m.phone)}</div></div></div><div class="text-right"><div class="text-blue-400">মূলধন: ৳${fmt(m.loanCapital)}</div><div class="text-orange-400">বকেয়া সুদ: ৳${fmt(m.dueInterest)}</div></div></div>`).join('');
+}
+
+/* ---------- Profile ---------- */
+function openProfile(id, type) {
+  activeProfileId = id; activeProfileType = type; $('globalSearchResults').classList.add('hidden');
+  const m = (type === 'general' ? gm() : lm()).find(x => x.id === id); if (!m) return;
+  $('profile-title').innerText = `${m.name} (${type === 'general' ? 'দেনা-পাওনা' : 'লোন'})`;
+  const txs = appData.transactions.filter(t => t.memberId === id);
+  const txHtml = txs.length === 0 ? `<div class="text-center text-gray-500 py-2">কোনো লেনদেন নেই</div>` :
+    txs.map(t => `<div class="bg-gray-950 p-2 rounded-lg border border-gray-800 text-[11px] flex justify-between items-center gap-2"><div class="flex-1"><div class="font-medium text-white">${esc(t.typeText)} ${t.note ? `(${esc(t.note)})` : ''}</div><div class="text-[9px] text-gray-400">${esc(t.dateTime)}</div></div><div class="font-bold ${t.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}">৳ ${fmt(Math.abs(t.amount))}</div>${t.delta ? `<button onclick="openPinModal('undo_tx','${t.id}')" class="text-red-400 px-1" title="বাতিল"><i class="fa-solid fa-rotate-left"></i></button>` : ''}</div>`).join('');
+  const actions = type === 'general' ? `
+    <div class="grid grid-cols-2 gap-2 pt-2">
+      <button onclick="openQuickActionModalWithMember('${m.id}','pawna')" class="bg-emerald-800 py-2 rounded-xl font-bold text-white text-xs">৳ দিলাম (পাওনা)</button>
+      <button onclick="openQuickActionModalWithMember('${m.id}','collection')" class="bg-cyan-800 py-2 rounded-xl font-bold text-white text-xs">৳ পেলাম</button></div>` : `
+    <div class="grid grid-cols-3 gap-1.5 pt-2">
+      <button onclick="openQuickActionModalWithMember('${m.id}','loan_give')" class="bg-blue-800 py-2 rounded-xl font-bold text-white text-[10px]">১. মূলধন দিলাম</button>
+      <button onclick="openQuickActionModalWithMember('${m.id}','loan_get')" class="bg-purple-800 py-2 rounded-xl font-bold text-white text-[10px]">২. মূলধন পেলাম</button>
+      <button onclick="openQuickActionModalWithMember('${m.id}','interest')" class="bg-amber-800 py-2 rounded-xl font-bold text-white text-[10px]">৩. সুদ পেলাম</button></div>`;
+  const stats = type === 'general'
+    ? `<div class="grid grid-cols-2 gap-2 text-xs"><div class="bg-gray-950 p-2 rounded-lg">পাওনা: <span class="text-emerald-400 font-bold">৳${fmt(m.pawna)}</span></div><div class="bg-gray-950 p-2 rounded-lg">দেনা: <span class="text-red-400 font-bold">৳${fmt(m.dena)}</span></div></div>`
+    : `<div class="grid grid-cols-3 gap-1.5 text-[10px]"><div class="bg-gray-950 p-1.5 rounded-lg">মূলধন: <span class="text-blue-400 font-bold">৳${fmt(m.loanCapital)}</span></div><div class="bg-gray-950 p-1.5 rounded-lg">বকেয়া সুদ: <span class="text-orange-400 font-bold">৳${fmt(m.dueInterest)}</span></div><div class="bg-gray-950 p-1.5 rounded-lg">আদায় সুদ: <span class="text-amber-400 font-bold">৳${fmt(m.paidInterest)}</span></div></div>
+       <div class="text-[10px] text-gray-400">পরবর্তী সুদ যোগ: ${new Date(m.nextDue || Date.now()).toLocaleDateString('bn-BD')} (${fmt(periodInterest(m))} ৳/${esc(m.term)})</div>`;
+  $('profile-details-content').innerHTML = `
+    <div class="flex items-center gap-3 border-b border-gray-800 pb-3"><div class="w-14 h-14 rounded-xl bg-gray-800 flex items-center justify-center text-cyan-400 font-bold text-lg">${esc(m.name.charAt(0))}</div>
+      <div class="space-y-0.5 text-[11px]"><div><b>পিতার নাম:</b> ${esc(m.father) || 'নেই'}</div><div><b>মোবাইল:</b> ${esc(m.phone)}</div><div><b>ঠিকানা:</b> ${esc(m.address) || 'নেই'}</div></div></div>
+    ${stats}${actions}
+    <div class="space-y-1 pt-1"><div class="font-bold text-xs text-cyan-300">লেনদেন ইতিহাস:</div><div class="max-h-36 overflow-y-auto space-y-1.5">${txHtml}</div></div>
+    <div class="flex gap-2 pt-2 border-t border-gray-800">
+      <button onclick="downloadMemberReport('${m.id}')" class="w-1/2 bg-cyan-700 py-1.5 rounded-lg text-xs font-semibold text-white">রিপোর্ট</button>
+      <button onclick="openPinModal('delete_member')" class="w-1/2 bg-red-900 py-1.5 rounded-lg text-xs font-semibold text-red-200">রিমুভ (পিন)</button></div>`;
+  $('profileModal').classList.remove('hidden');
+}
+
+/* ---------- Quick actions ---------- */
+const isGeneralType = t => ['pawna', 'dena', 'collection'].includes(t);
+function openQuickActionModal(type) {
+  selectedQaType = type; selectedQaMemberId = null;
+  const titles = { pawna:'+ পাওনা যোগ', dena:'+ দেনা যোগ', collection:'↓ টাকা আদায়', loan_give:'↑ মূলধন দিলাম', loan_get:'↓ মূলধন পেলাম', interest:'% সুদ পেলাম' };
+  $('qaTitle').innerText = titles[type];
+  ['qaMemberInput','qaAmount','qaNote'].forEach(i => $(i).value = '');
+  $('quickActionModal').classList.remove('hidden');
+}
+function openQuickActionModalWithMember(id, type) {
+  closeModal('profileModal'); openQuickActionModal(type);
+  selectedQaMemberId = id; $('qaMemberInput').value = person(id).name;
+}
+function handleQaSearch(v) {
+  const box = $('qaSearchResults'); if (!v.trim()) return box.classList.add('hidden');
+  box.innerHTML = searchRows(isGeneralType(selectedQaType) ? gm() : lm(), v.toLowerCase().trim(), 'selectQaMember'); box.classList.remove('hidden');
+}
+function selectQaMember(id) { selectedQaMemberId = id; $('qaMemberInput').value = person(id).name; $('qaSearchResults').classList.add('hidden'); }
+function submitQuickAction() {
+  if (!selectedQaMemberId) return toast('সদস্য নির্বাচন করুন!', true);
+  const amount = Number($('qaAmount').value || 0), note = $('qaNote').value.trim();
+  if (!(amount > 0)) return toast('সঠিক পরিমাণ লিখুন!', true);
+  const m = (isGeneralType(selectedQaType) ? appData.generalMembers : appData.loanMembers).find(x => x.id === selectedQaMemberId);
+  if (!m) return toast('সদস্য এই খাতায় নেই!', true);
+  let d, text;
+  switch (selectedQaType) {
+    case 'pawna': d = { pawna: amount }; text = 'পাওনা যোগ'; break;
+    case 'dena': d = { dena: amount }; text = 'দেনা যোগ'; break;
+    case 'collection':
+      if (m.pawna >= amount) d = { pawna: -amount };
+      else {
+        if (!confirm(`পাওনা ৳${fmt(m.pawna)}, কিন্তু আদায় ৳${fmt(amount)}। বাকিটা "দেনা" হিসেবে যোগ হবে। চালিয়ে যাবেন?`)) return;
+        d = { pawna: -m.pawna, dena: amount - m.pawna };
+      }
+      text = 'টাকা আদায়'; break;
+    case 'loan_give': d = { loanCapital: amount }; text = 'মূলধন দিলাম'; break;
+    case 'loan_get': d = { loanCapital: -Math.min(amount, m.loanCapital) }; text = 'মূলধন পেলাম'; break;
+    case 'interest': d = { paidInterest: amount, dueInterest: -Math.min(amount, m.dueInterest) }; text = 'সুদ পেলাম'; break;
+  }
+  for (const k in d) m[k] = r2(m[k] + d[k]);
+  logTx(m.id, amount, text, note, d);
+  saveData(); closeModal('quickActionModal'); toast('সম্পন্ন হয়েছে!');
+}
+
+/* ---------- Summary details / reminders ---------- */
+function showSummaryDetails(type) {
+  const line = (m, t, cls, val) => `<div class="flex justify-between border-b border-gray-800 pb-1 cursor-pointer" onclick="closeModal('summaryModal');openProfile('${m.id}','${t}')"><span>${esc(m.name)}</span><span class="${cls}">৳${fmt(val)}</span></div>`;
+  const cfg = {
+    pawna: ['পাওনাদার তালিকা', gm().filter(m => m.pawna > 0).map(m => line(m,'general','text-emerald-400',m.pawna))],
+    dena: ['দেনাদার তালিকা', gm().filter(m => m.dena > 0).map(m => line(m,'general','text-red-400',m.dena))],
+    capital: ['লোন গ্রহীতা', lm().map(m => line(m,'loan','text-blue-400',m.loanCapital))],
+    due_interest: ['বকেয়া সুদ', lm().filter(m => m.dueInterest > 0).map(m => line(m,'loan','text-orange-400',m.dueInterest))],
+    paid_interest: ['আদায়কৃত সুদ', lm().filter(m => m.paidInterest > 0).map(m => line(m,'loan','text-amber-400',m.paidInterest))],
+    members: ['সকল সদস্য', appData.allMembers.map(m => `<div class="flex justify-between border-b border-gray-800 pb-1"><span>${esc(m.name)}</span><span class="text-gray-400">${esc(m.phone)}</span></div>`)]
+  }[type];
+  $('summaryModalTitle').innerText = cfg[0]; $('summaryModalContent').innerHTML = cfg[1].join('') || 'নেই';
+  $('summaryModal').classList.remove('hidden');
+}
+function openReminderModal() {
+  let h = '';
+  const btn = (m, msg) => `<div class="flex gap-1"><a href="tel:${esc(m.phone)}" class="bg-emerald-700 px-2 py-1 rounded text-white text-[10px]">কল</a><a href="sms:${esc(m.phone)}?body=${encodeURIComponent(msg)}" class="bg-indigo-700 px-2 py-1 rounded text-white text-[10px]">এসএমএস</a></div>`;
+  gm().forEach(m => { if (m.pawna > 0) h += `<div class="bg-gray-950 p-2 rounded flex justify-between items-center"><div><b>${esc(m.name)}</b><br><span class="text-[10px] text-gray-400">${esc(m.phone)} | পাওনা: ৳${fmt(m.pawna)}</span></div>${btn(m, `আসসালামু আলাইকুম ${m.name}, আপনার কাছে আমার ৳${m.pawna} পাওনা আছে। অনুগ্রহ করে পরিশোধ করুন।`)}</div>`; });
+  lm().forEach(m => { if (m.dueInterest > 0) h += `<div class="bg-gray-950 p-2 rounded flex justify-between items-center"><div><b>${esc(m.name)}</b> <span class="text-[9px] text-amber-400">(লোন)</span><br><span class="text-[10px] text-gray-400">${esc(m.phone)} | বকেয়া সুদ: ৳${fmt(m.dueInterest)}</span></div>${btn(m, `আসসালামু আলাইকুম ${m.name}, আপনার বকেয়া সুদ ৳${m.dueInterest}। অনুগ্রহ করে পরিশোধ করুন।`)}</div>`; });
+  $('reminder-list').innerHTML = h || 'কোনো তাগাদা বাকি নেই';
+  $('reminderModal').classList.remove('hidden');
+}
+function renderRecentTransactions() {
+  $('recent-transactions-list').innerHTML = appData.transactions.length === 0 ? 'কোনো লেনদেন নেই' :
+    appData.transactions.slice(0, 5).map(t => `<div class="bg-gray-950 p-2 rounded border border-gray-800 text-left text-[11px] flex justify-between items-center"><div><div class="font-bold text-gray-200">${esc(person(t.memberId).name)} — ${esc(t.typeText)} ${t.note ? `(${esc(t.note)})` : ''}</div><div class="text-[9px] text-gray-400">${esc(t.dateTime)}</div></div><div class="text-amber-400 font-bold">৳ ${fmt(t.amount)}</div></div>`).join('');
+}
+
+/* ---------- PIN & Actions ---------- */
+let pendingTxId = null;
+function openPinModal(action, param) {
+  pendingPinAction = action; pendingTxId = param || null;
+  $('pinInput').value = ''; $('newPinInput').value = '';
+  $('newPinBox').classList.toggle('hidden', action !== 'change_pin');
+  $('pinModal').classList.remove('hidden');
+}
+function verifyPinAction() {
+  if ($('pinInput').value !== appData.pin) return toast('ভুল পিন!', true);
+  if (pendingPinAction === 'change_pin') {
+    const np = $('newPinInput').value;
+    if (!/^\d{4}$/.test(np)) return toast('নতুন পিন ৪ সংখ্যার হতে হবে!', true);
+    appData.pin = np; saveData(); closeModal('pinModal'); return toast('পিন পরিবর্তন হয়েছে!');
+  } else if (pendingPinAction === 'disable_lock') {
+    appData.lockEnabled = false;
+    saveData();
+    closeModal('pinModal');
+    toast('পিন লক বন্ধ করা হয়েছে');
+    return;
+  }
+  closeModal('pinModal');
+  if (pendingPinAction === 'reset_data') {
+    if (!confirm('সব ডাটা মুছে যাবে! নিশ্চিত?')) return;
+    appData = { pin: '1234', lockEnabled: true, allMembers: [], generalMembers: [], loanMembers: [], transactions: [] };
+    saveData(); toast('রিসেট সম্পন্ন হয়েছে!'); switchTab('home');
+  } else if (pendingPinAction === 'delete_member') {
+    if (!confirm('সদস্য ও তার সব লেনদেন স্থায়ীভাবে মুছে যাবে। নিশ্চিত?')) return;
+    const id = activeProfileId;
+    ['allMembers', 'generalMembers', 'loanMembers'].forEach(k => appData[k] = appData[k].filter(m => m.id !== id));
+    appData.transactions = appData.transactions.filter(t => t.memberId !== id);
+    saveData(); closeModal('profileModal'); toast('রিমুভ করা হয়েছে!');
+  } else if (pendingPinAction === 'undo_tx' && pendingTxId) {
+    const t = appData.transactions.find(x => x.id === pendingTxId);
+    if (t && t.delta) {
+      const list = ('pawna' in t.delta || 'dena' in t.delta) ? appData.generalMembers : appData.loanMembers;
+      const m = list.find(x => x.id === t.memberId);
+      if (m) for (const k in t.delta) m[k] = r2(Math.max(0, m[k] - t.delta[k]));
+      appData.transactions = appData.transactions.filter(x => x.id !== pendingTxId);
+      saveData(); openProfile(activeProfileId, activeProfileType); toast('লেনদেন বাতিল হয়েছে');
+    }
+  }
+}
+
+/* ---------- Reports ---------- */
+function downloadFile(name, text, mime) {
+  const url = URL.createObjectURL(new Blob([text], { type: mime || 'text/plain;charset=utf-8' }));
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+}
+function downloadMemberReport(id) {
+  const p = person(id), txs = appData.transactions.filter(t => t.memberId === id).slice().reverse();
+  let text = `নাম: ${p.name}\nফোন: ${p.phone}\n\n`;
+  txs.forEach((t, i) => text += `${i + 1}. [${t.dateTime}] ${t.typeText}: ৳${t.amount}${t.note ? ' (' + t.note + ')' : ''}\n`);
+  downloadFile(`${p.name}.txt`, '\uFEFF' + text);
+}
+function downloadFullReport() {
+  let text = `পূর্ণাঙ্গ রিপোর্ট\n\n`;
+  appData.transactions.slice().reverse().forEach((t, i) => text += `${i + 1}. [${t.dateTime}] ${person(t.memberId).name} — ${t.typeText}: ৳${t.amount}\n`);
+  downloadFile('report.txt', '\uFEFF' + text);
+}
+function renderReportTab() {
+  let p = 0, d = 0, c = 0, di = 0, pi = 0;
+  appData.generalMembers.forEach(m => { p += m.pawna; d += m.dena; });
+  appData.loanMembers.forEach(m => { c += m.loanCapital; di += m.dueInterest; pi += m.paidInterest; });
+  $('rep-total-members').innerText = `${fmt(appData.allMembers.length)} জন`;
+  $('rep-total-pawna').innerText = `৳ ${fmt(p)}`; $('rep-total-dena').innerText = `৳ ${fmt(d)}`; $('rep-total-capital').innerText = `৳ ${fmt(c)}`;
+  $('rep-total-due-interest').innerText = `৳ ${fmt(r2(di))}`; $('rep-total-paid-interest').innerText = `৳ ${fmt(r2(pi))}`;
+}
+
+/* ---------- Backup ---------- */
+const bname = () => 'hisab-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+function backupStatus() {
+  const el = $('bk-status'); if (!el) return;
+  el.innerText = appData.lastBackup ? 'সর্বশেষ ব্যাকআপ: ' + new Date(appData.lastBackup).toLocaleString('bn-BD') : 'এখনো কোনো ব্যাকআপ নেওয়া হয়নি';
+}
+function markBackup() {
+  appData.lastBackup = Date.now();
+  try { localStorage.setItem(KEY, JSON.stringify(appData)); } catch (e) {}
+  backupStatus();
+}
+function localBackup() {
+  downloadFile(bname(), JSON.stringify(appData), 'application/json');
+  markBackup(); toast('ডিভাইসে ব্যাকআপ সফলভাবে ডাউনলোড হয়েছে');
+}
+function restoreBackup(inp) {
+  const f = inp.files && inp.files[0]; if (!f) return;
+  const fr = new FileReader();
+  fr.onload = e => {
+    try {
+      const d = JSON.parse(e.target.result);
+      if (!Array.isArray(d.allMembers) || !Array.isArray(d.transactions)) throw 0;
+      if (!confirm('বর্তমান সব ডাটা মুছে ব্যাকআপ ফাইলের ডাটা বসানো হবে। নিশ্চিত?')) return;
+      appData = Object.assign({ pin: '1234', lockEnabled: true, generalMembers: [], loanMembers: [] }, d);
+      saveData(); toast('রিস্টোর সম্পন্ন হয়েছে!');
+    } catch (err) { toast('ব্যাকআপ ফাইলটি সঠিক নয়!', true); }
+    inp.value = '';
+  };
+  fr.readAsText(f);
+}
+function restoreAuto() {
+  const s = localStorage.getItem(KEY + '_auto');
+  if (!s) return toast('কোনো স্ন্যাপশট নেই', true);
+  const t = new Date(Number(localStorage.getItem(KEY + '_auto_t')));
+  if (!confirm('স্ন্যাপশট (' + t.toLocaleDateString('bn-BD') + ') থেকে রিস্টোর করবেন? বর্তমান ডাটা বদলে যাবে।')) return;
+  try {
+    appData = Object.assign({ pin: '1234', lockEnabled: true, allMembers: [], generalMembers: [], loanMembers: [], transactions: [] }, JSON.parse(s));
+    saveData(); toast('রিস্টোর হয়েছে');
+  } catch (e) { toast('স্ন্যাপশট নষ্ট', true); }
+}
+
+/* ---------- Icons rendering ---------- */
+const ICONS = {
+  'scale-balanced':'<path d="M12 3v18M7 21h10M4 7h16M4 7l-3 7h6zM20 7l-3 7h6z"/>',
+  'user-shield':'<circle cx="9" cy="8" r="3.5"/><path d="M2 21v-1a6 6 0 0110-4.5"/><path d="M18 13l4 1.5v3c0 2.5-2 4-4 5-2-1-4-2.5-4-5v-3z"/>',
+  'user-plus':'<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0114 0M19 8v6M16 11h6"/>',
+  'bell':'<path d="M18 8a6 6 0 10-12 0c0 7-3 8-3 8h18s-3-1-3-8M10 21h4"/>',
+  'house':'<path d="M3 11l9-8 9 8M5 10v10h14V10"/>',
+  'users':'<circle cx="9" cy="8" r="3.5"/><path d="M2 20a7 7 0 0114 0"/><circle cx="17" cy="9" r="3"/><path d="M17 14a6 6 0 015 6"/>',
+  'landmark':'<path d="M3 21h18M5 21V10M9 21V10M15 21V10M19 21V10M2 10l10-6 10 6z"/>',
+  'chart-pie':'<path d="M12 3v9h9a9 9 0 00-9-9z"/><path d="M10 5a9 9 0 109 9h-9z"/>',
+  'gear':'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
+  'magnifying-glass':'<circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/>',
+  'chart-simple':'<path d="M5 21V11M12 21V4M19 21v-7"/>',
+  'bolt':'<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+  'plus':'<path d="M12 5v14M5 12h14"/>',
+  'arrow-down':'<path d="M12 4v16M5 13l7 7 7-7"/>',
+  'arrow-up':'<path d="M12 20V4M5 11l7-7 7 7"/>',
+  'percent':'<path d="M19 5L5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/>',
+  'clock-rotate-left':'<path d="M3 12a9 9 0 109-9 9 9 0 00-7 3.5L3 8M3 3v5h5M12 7v5l3 2"/>',
+  'rotate-left':'<path d="M3 12a9 9 0 109-9 9 9 0 00-7 3.5L3 8M3 3v5h5"/>',
+  'chevron-right':'<path d="M9 5l7 7-7 7"/>',
+  'xmark':'<path d="M6 6l12 12M18 6L6 18"/>',
+  'lock':'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/>',
+  'cloud-arrow-up':'<path d="M7 18a4 4 0 01-.5-8 6 6 0 0111.5 1.5A3.5 3.5 0 0117.5 18"/><path d="M12 12v8M9 15l3-3 3 3"/>',
+  'floppy-disk':'<path d="M5 3h12l4 4v14H5z"/><path d="M8 3v6h8V3"/><rect x="8" y="14" width="8" height="7"/>',
+  'right-to-bracket':'<path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/>'
+};
+let iconPending = false;
+function convertIcons() {
+  iconPending = false;
+  document.querySelectorAll('i.fa-solid').forEach(el => {
+    const c = [...el.classList].find(x => x.startsWith('fa-') && x !== 'fa-solid');
+    const n = c && c.slice(3);
+    el.classList.remove('fa-solid'); if (c) el.classList.remove(c);
+    if (n && ICONS[n]) el.innerHTML = `<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-.125em">${ICONS[n]}</svg>`;
+  });
+}
+new MutationObserver(() => { if (!iconPending) { iconPending = true; requestAnimationFrame(convertIcons); } })
+  .observe(document.body, { childList: true, subtree: true });
+
+/* ---------- Start ---------- */
+convertIcons();
+accrueInterest();
+checkLockScreen();
+renderAll();
+backupStatus();
+setInterval(accrueInterest, 3600000);
+</script>
+</body>
+</html>
